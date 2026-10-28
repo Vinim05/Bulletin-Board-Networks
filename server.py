@@ -1,9 +1,10 @@
 import socket
 import threading
-import json 
+import json
+from datetime import datetime 
 
 HOST = "0.0.0.0"
-PORT = 5000
+PORT = 5000 #
 
 clients = {} #maps usernames
 messages = [] #stores messages
@@ -11,6 +12,33 @@ next_message_id = 1 #gives messages an ID
 
 lock = threading.Lock() #protects shared data
 
+def post_message(username, subject, content):
+    global next_message_id #lets function update counter defined outside it
+
+    with lock: #prevents concurrent threads from assigning same message ID
+        message = {
+            "id": next_message_id,
+            "sender": username,
+            "date": datetime.now().isoformat( #records when message was posted
+                timespec="seconds"
+            ),
+            "subject": subject,
+            "content": content
+        }
+
+        messages.append(message) #stores the entire message
+        next_message_id += 1
+
+        broadcast({ #sends a summary to all connected users except sender
+            "type": "new_message",
+            "message": {
+                "id": message["id"],
+                "sender": message["sender"]
+                "date": message["date"]
+                "subject": message["subject"]
+            }
+        }, exclude=username)
+        return message
 
 def send_json(client_socket, data):
     message = json.dumps(data) + "\n" #converts dict to JSON
@@ -39,66 +67,41 @@ def handle_client(client_socket, client_address):
             request = recieve_json(client_file)
 
             if request is None:
-                return
+                break
 
-            if request.get("type") != "join":
+            if not isinstance(request, dict):
                 send_json(client_socket, {
                     "type": "error",
-                    "message": "Please provide a username to join."
+                    "message": "Invalid Request."
                 })
                 continue
 
-            requested_username = request.get("username")
+            if request.get("type") == "post":
+                subject = request.get("subject")
+                content = request.get("content")
 
-            if not isinstance(requested_username, str):
+                if not isinstance(subject, str) or not subject.strip():
+                    send_json(client_socket, {
+                        "type": "error",
+                        "message": "Message content cannot be empty."
+                    })
+                    continue
+
+                message = post_message(
+                    username, subject.strip(),
+                    content.strip()
+                )
+
+                send_json(client_socket, {
+                    "type": "message_posted",
+                    "message_id": message["id"]
+                })
+
+            else:
                 send_json(client_socket, {
                     "type": "error",
-                    "message": "Username must be text,"
+                    "message": "Unkown request type."
                 })
-                continue
-            requested_username = requested_username.strip()
-
-            if not requested_username:
-                send_json(client_socket, {
-                    "type": "error",
-                    "message": "Username cannot be empty."
-                })
-                continue
-
-            with lock:
-                if requested_username in clients:
-                    username_available = False
-                else:
-                    clients[requested_username] = client_socket
-                    username = requested_username
-                    username_available = True 
-
-            if not username_available:
-                send_json(client_socket, {
-                    "type": "error", 
-                    "message": "Username is already taken."
-                })
-                continue
-            send_json(client_socket, {
-                "type": "joined", 
-                "username": username
-            })
-
-            print(f"{username} joined from {client_address}")
-            break 
-    except (ConnectionError, OSError, json.JSONDecodeError) as error:
-        print(f"Connection error with {client_address}: {error}")
-
-    finally:
-        if username is not None:
-            with lock:
-                clients.pop(username, None)
-
-            print(f"{username} disconnected")
-
-        client_file.close()
-        client_socket.close()
-
 
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
