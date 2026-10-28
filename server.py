@@ -14,5 +14,19 @@ def start_server():
     # creates a TCP socket, AF_INET = IPv4, 
 
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((HOST, PORT)) #
-    
+    server_socket.bind((HOST, PORT)) #attaches to port 5000
+    server_socket.listen() 
+
+    print(f"Server is listening on port {PORT}")
+
+    while True:
+        client_socket, client_address = server_socket.accept()
+
+        client_thread = threading.Thread(
+            target=handle_client, 
+            args= (client_socket, client_address)
+        )
+        client_thread.start()
+
+if __name__ == "__main__":
+    start_server()
