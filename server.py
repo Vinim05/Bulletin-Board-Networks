@@ -92,7 +92,7 @@ def handle_client(client_socket, client_address):
 
         # STEP 1: Register the client
         while username is None:
-            request = receive_json(client_file)
+            request = recieve_json(client_file)
 
             if request is None:
                 return
@@ -173,7 +173,7 @@ def handle_client(client_socket, client_address):
 
         # STEP 2: Handle requests from registered clients
         while True:
-            request = receive_json(client_file)
+            request = recieve_json(client_file)
 
             if request is None:
                 break
